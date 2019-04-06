@@ -84,3 +84,14 @@ por ejemplo. Esta URI solicita la información del usuario 1.
        ...
     }
 ```
+Anotaciones `@Path` y `@PathParam`.
+2. Cambiamos el servicio de un ejb @Stateless a un @Singleton para manipular la lista durante la ejecución de la aplicación al agregar, consultar, eliminar o actualizar algún User.
+3. En la clase de servicio `UserService.java` se implementa un método que reciba el id del User y devuelva el detalle del mismo, si existe. Más adelante se verá cómo manejar el caso en el que no exista.
+```java
+    public User byId(int id) {
+        ...
+    }
+```
+4. Ejecutamos la aplicación y visitamos http://localhost:8080/users/1 para ver el detalle del User con id 1
+
+## Registrando un nuevo User
