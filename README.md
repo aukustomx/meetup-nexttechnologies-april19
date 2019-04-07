@@ -207,3 +207,82 @@ private static Response responseOf(ConstraintViolationException e) {
 ```
 
 ## Persistencia en Base de Datos
+1. Para probar la persistencia en base de datos con JPA, agregamos las siguientes dependencias al `pom.xml`:
+```xml
+<dependency>
+      <groupId>io.thorntail</groupId>
+      <artifactId>jpa</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>com.h2database</groupId>
+      <artifactId>h2</artifactId>
+      <version>1.4.187</version>
+    </dependency>
+```
+2. Creamos la siguiente estructura de directorios:
+```bash
+src/main/resources/META-INF
+```
+3. En el recién creado directorio META-INF creamos los archivos:
+persistence.xml
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<persistence
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        version="2.1"
+        xmlns="http://xmlns.jcp.org/xml/ns/persistence"
+        xsi:schemaLocation="http://xmlns.jcp.org/xml/ns/persistence http://xmlns.jcp.org/xml/ns/persistence/persistence_2_1.xsd">
+    <persistence-unit name="UserPU" transaction-type="JTA">
+        <properties>
+            <property name="javax.persistence.schema-generation.database.action" value="drop-and-create"/>
+            <property name="javax.persistence.schema-generation.create-source" value="metadata"/>
+            <property name="javax.persistence.schema-generation.drop-source" value="metadata"/>
+            <property name="javax.persistence.sql-load-script-source" value="META-INF/load.sql"/>
+        </properties>
+    </persistence-unit>
+</persistence>
+```
+load.sql
+```sql
+INSERT INTO USER("ID", "NAME", "EMAIL") VALUES (1, 'Penny', 'Penny@mail.com');
+INSERT INTO USER("ID", "NAME", "EMAIL") VALUES (2, 'Sheldon', 'Sheldon@mail.com');
+INSERT INTO USER("ID", "NAME", "EMAIL") VALUES (3, 'Amy', 'Amy@mail.com');
+INSERT INTO USER("ID", "NAME", "EMAIL") VALUES (4, 'Leonard', 'Leonard@mail.com');
+INSERT INTO USER("ID", "NAME", "EMAIL") VALUES (5, 'Bernadette', 'Bernadette@mail.com');
+```
+4. Transformamos la clase User en una `@Entity` que mapea a la tabla `"USER"` en la base de datos en `h2`.
+```java
+@Entity
+@Table(name = "USER")
+public class User {
+
+    @Id
+    @GeneratedValue(strategy = GenerationType.AUTO)
+    private int id;
+
+    private String name;
+    private String email;
+    
+    ...constructors, getters y setters
+```
+5. Generamos la clase `com.aukustomx.simpleapp.user.persistence.UserRepository.java` que servirá de DAO a la clase de servicio UserService.java. Esta clase utiliza en EntityManager que automaticamente se genera con el PersistenceUnit `UserPU` definido en el `persistence.xml`.
+```java
+...
+@Stateless
+public class UserRepository {
+
+    @PersistenceContext
+    EntityManager em;
+
+    public User byId(int id) {
+        return em.find(User.class, id);
+    }
+    ...
+}
+```
+6. Cambiamos la implementación del UserService para
+   * Inyectar el UserRepository
+   * Buscar el User byId desde la base de datos y no de la lista statica de la clase.
+7. Ir a la dirección http://localhost:8080/users/1 y ver el resultado. 
+   
+## Bonus: Multipart request - Uploading/downloading a file
