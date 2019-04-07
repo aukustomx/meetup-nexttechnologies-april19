@@ -95,3 +95,115 @@ Anotaciones `@Path` y `@PathParam`.
 4. Ejecutamos la aplicación y visitamos http://localhost:8080/users/1 para ver el detalle del User con id 1
 
 ## Registrando un nuevo User
+Para efectos de demostrar el uso del método POST (a través de la anotación @POST):
+1. Implementar el método `add` a la clase `UserEndpoint.java`.
+2. Anotar el método mencionado anteriormente con `@POST
+3. Crear la clase `UserRequest.java`, que será la encargada de "mapear" el body del request a un objeto Java
+4. Implementar el método `add`, ahora en la clase de servicio `UserService.java`.
+5. Desplegar y probar agregando un nuevo User y seguidamente consultando la lista para verificar que esté dado de alta.
+6.- ¡Qué pasa si queremos agregar un usuario que ya existe o ver el detalle de uno que no existe?
+
+## Manejo Global de Excepciones
+Cuando un error ocurre dentro de nuestros servicios, ya sea un error de negocio o uno de runtime, no queremos que el StackTrace sea devuelto a nuestros cliente (no es apto para cardiacos). En cambio, sería mejor manejar las excepciones y contestar con un código HTTP más adecuado y con un mensaje claro que le indique lo que ha ocurrido, además de alguna sugerencia para remediar lo ocurrido.
+
+1. Cambiar el tipo de respuesta de los métodos de la clase UserService.java a javax.ws.rs.core.Response
+2. Solicitar el alta de un User con un email que ya existe.
+3. Manejar la excepción y generar un objeto Response con un código HTTP 400 - Bad Request y un mensaje que indique que el usuario ya existe.
+4. Cambiar la implementación del `UserEndpoint.java`, en el método `add` para que regrese lo que el servicio ha regresado tal cual.
+5. Probar nuevamente el punto 2.
+
+Este manejo de excepciones es aparentemente correcto. Pero qué pasa en el caso en el que tengamos muchos escenarios de fallas. No deseamos que nuestros servicios estén llenos de código que atrapa excepciones y construye Responses de acuerdo al problema (esa no es su tarea). Para este problema, JAX-RS ofrece una inteface de manejo de excepciones, que nos permite atrapar (a través de un interceptor) una excepción antes de regresar al cliente, manejarla en un punto central y convertirla en un Response para ser devuelta al solicitante. Estamos hablando de la interface 
+
+1. Definir una clase de acarreo de respuesta llamada ResponseVO.java como sigue:
+2. Se recomienda que las APIs tengan una serie de códigos de retorno que el usuario pueda conocer para saber qué ha ocurrido con sus peticiones, así que generamos una clase ResponseCode.java y agregamos algunos códigos de retorno
+```java
+...
+public enum ResponseCode {
+    SUCCESSFUL_OPERATION(OK, "1", "Operación exitosa"),
+    FAILED_OPERATION(INTERNAL_SERVER_ERROR, "2", "Operación fallida"),
+    USER_DOES_NOT_EXISTS(BAD_REQUEST, "3", "El usuario no existe"),
+    USER_ALREADY_EXISTS(BAD_REQUEST, "4", "El usuario ya existe");
+    
+    private final HttpStatus status;
+    private final String code;
+    private final String message;
+}
+```
+
+3. Definir una clase que implemente a RuntimeException, llamada UserException.java, como sigue:
+```java
+...
+@ApplicationException(rollback = true)
+public class UserException extends RuntimeException {
+    
+    private ResponseCode responseCode;
+    
+    public UserException(ResponseCode responseCode) {
+        this.responseCode = responseCode;
+    }
+
+    public UserException(String message, ResponseCode responseCode) {
+        super(message);
+        this.responseCode = responseCode;
+    }
+
+    public UserException(String message, Throwable cause, ResponseCode responseCode) {
+        super(message, cause);
+        this.responseCode = responseCode;
+    }
+}
+```
+La anotación `@ApplicationException` define a una excepción como de aplicación. Se agrega el atributo `rollback = true` para indicar que si se presenta esta excepción en una operación `@Transactional` de un EJB, la transacción debe rechazarse.
+
+4. Implementar el ExceptionMapper que manejará las excepciones. Crearemos uno genérico:
+```java
+...
+@Provider
+public class UserExceptionMapper implements ExceptionMapper<Exception> {
+    @Override
+    public Response toResponse(Exception e) {
+        if (e instanceof UserException) {
+            return responseOf((UserException) e);
+        }
+        
+        return responseOf(e);
+    }
+    ...
+}
+```
+
+5. El siguiente es el código del VO para transportar las respuestas de los servicios a los endpoints.
+```java
+...
+public class ResponseVO<T> {
+    private final ResponseCode responseCode;
+    private final T result;
+
+    //constructors, getters y setters
+```
+2. Cambiar la implementación del servicio de alta para devolver un objeto de la clase `ResponseVO.java`.
+3. En el caso de que el User ya exista, generar una excepción
+
+Existe otra forma de manejo de excepciones y es generar una `WebApplicationException`. Esta queda de tarea para el lector.
+
+## Bean Validation y manejo de excepciones de validación
+1. Anotar los atributos del la clase UserRequest.java con las anotaciones de BeanValidation que apliquen, por ejemplo: @NotNull, @NotBlank, @Min y sus respectivos mensajes
+2. Probar la validación enviando solicitudes incorrectas provocando que fallen las validaciones.
+3. Agregar el manejo de las excepciones `javax.validation.ConstraintViolationException` en el ExceptionMapper
+```java
+...
+private static Response responseOf(ConstraintViolationException e) {
+  List<String> errorMessages = e.getConstraintViolations().stream()
+          .map(ConstraintViolation::getMessage)
+          .collect(Collectors.toList());
+
+  return Response
+          .status(INVALID_PARAMS.getStatus())
+          .header(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON)
+          .entity(INVALID_PARAMS.asMap(errorMessages))
+          .build();
+}
+...
+```
+
+## Persistencia en Base de Datos
