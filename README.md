@@ -285,4 +285,45 @@ public class UserRepository {
    * Buscar el User byId desde la base de datos y no de la lista statica de la clase.
 7. Ir a la dirección http://localhost:8080/users/1 y ver el resultado. 
    
-## Bonus: Multipart request - Uploading/downloading a file
+## Bonus: Multipart request - Uploading a file
+1. Agregar fraction al pom.xml
+```xml
+    <dependency>
+      <groupId>io.thorntail</groupId>
+      <artifactId>jaxrs-multipart</artifactId>
+    </dependency>
+```
+
+2. Crear endpoint para alta de archivo (photo)
+```java
+    @PUT
+    @Path("/{id}/profile")
+    @Consumes(MediaType.MULTIPART_FORM_DATA)
+    public Response uploadPhoto(@PathParam("id") int id, MultipartFormDataInput file) {
+        return responseOf(userService.uploadPhoto(id, file));
+    }
+```
+
+3. Implementar servicio que procesa el archivo recibido y lo guarda en el FS (esta operación es solo para fines demostrativos)
+```java
+    public ResponseVO uploadPhoto(int id, MultipartFormDataInput inputFile) {
+
+        //Validate user exists
+        User user = userRepository.byId(id);
+        if (null == user) {
+            throw new UserException(USER_DOES_NOT_EXISTS);
+        }
+
+        // Extracting and saving file
+        Map<String, List<InputPart>> uploadForm = inputFile.getFormDataMap();
+        List<InputPart> inputParts = uploadForm.get("attachment");
+        return saveFile(inputParts);
+    }
+```
+4. Probar subida de archivo:
+```bash
+curl -X PUT -F attachment=@"/home/aukustomx/photo.png" http://localhost:8080/users/1/profile
+```
+
+## Conclusiones
+La implementación de servicios RESTful con JEE8, específicamente con JAX-RS es bastante rápida y sencilla, y lo mejor es que se utilizan estándares del mismo Jakarta EE.
