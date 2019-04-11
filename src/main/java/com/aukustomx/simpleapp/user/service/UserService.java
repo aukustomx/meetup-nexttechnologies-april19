@@ -5,14 +5,17 @@ import com.aukustomx.simpleapp.infra.exception.UserException;
 import com.aukustomx.simpleapp.user.model.User;
 import com.aukustomx.simpleapp.user.model.UserRequest;
 import com.aukustomx.simpleapp.user.persistence.UserRepository;
+import org.apache.commons.io.IOUtils;
+import org.jboss.resteasy.plugins.providers.multipart.InputPart;
+import org.jboss.resteasy.plugins.providers.multipart.MultipartFormDataInput;
 
 import javax.annotation.PostConstruct;
 import javax.ejb.Singleton;
 import javax.inject.Inject;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.List;
-import java.util.Map;
+import javax.ws.rs.core.MultivaluedMap;
+import java.io.*;
+import java.util.*;
+import java.util.stream.Stream;
 
 import static com.aukustomx.simpleapp.common.model.ResponseCode.*;
 
@@ -56,15 +59,6 @@ public class UserService {
         }
 
         return ResponseVO.successful(user.asMap());
-
-        /*
-        return users.stream()
-                .filter(u -> u.getId() == id)
-                .findFirst()
-                .map(User::asMap)
-                .map(ResponseVO::successful)
-                .orElseThrow(() -> new UserException(USER_DOES_NOT_EXISTS));
-                */
     }
 
     public ResponseVO<Map<String, Object>> add(UserRequest req) {
@@ -85,5 +79,104 @@ public class UserService {
     public ResponseVO delete(int id) {
         users.removeIf(u -> u.getId() == id);
         return ResponseVO.successful();
+    }
+
+    public ResponseVO uploadPhoto(int id, MultipartFormDataInput inputFile) {
+
+        //Validate user exists
+        User user = userRepository.byId(id);
+        if (null == user) {
+            throw new UserException(USER_DOES_NOT_EXISTS);
+        }
+
+        // Extracting and saving file
+        Map<String, List<InputPart>> uploadForm = inputFile.getFormDataMap();
+        List<InputPart> inputParts = uploadForm.get("attachment");
+        return saveFile(inputParts);
+    }
+
+    private ResponseVO saveFile(List<InputPart> inputParts) {
+        for (InputPart inputPart : inputParts) {
+
+            try {
+
+                MultivaluedMap<String, String> header = inputPart.getHeaders();
+                String fileName = getFileName(header);
+                InputStream inputStream = inputPart.getBody(InputStream.class, null);
+
+                // convert the uploaded file to inputstream
+                byte[] bytes = inputStreamToByteArray(inputStream);
+
+                String path = System.getProperty("user.home") + File.separator + "uploads";
+                File customDir = new File(path);
+
+                if (!customDir.exists()) {
+                    customDir.mkdir();
+                }
+                fileName = customDir.getCanonicalPath() + File.separator + fileName;
+                writeFile(bytes, fileName);
+
+                return ResponseVO.successful("Uploaded file name : " + fileName);
+
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+        }
+        return ResponseVO.of(FAILED_OPERATION, null);
+    }
+
+    /*Helper methods*/
+    private String getFileName(MultivaluedMap<String, String> header) {
+
+        String[] headers = header.getFirst("Content-Disposition").split(";");
+        return Stream.of(headers)
+                .map(String::trim)
+                .filter(s -> s.startsWith("filename"))
+                .findFirst()
+                .map(s -> s.split("="))
+                .map(array -> array[1])
+                .map(String::trim)
+                .map(s -> s.replaceAll("\"", ""))
+                .orElse("unknown");
+
+/*
+        for (String filename : headers) {
+
+            if ((filename.trim().startsWith("filename"))) {
+
+                String[] name = filename.split("=");
+
+                return name[1].trim().replaceAll("\"", "");
+            }
+        }
+        return "unknown";
+ */
+    }
+
+    private void writeFile(byte[] content, String filename) throws IOException {
+        File file = new File(filename);
+
+        if (!file.exists()) {
+            boolean isCreated = file.createNewFile();
+            if (isCreated) {
+                System.out.println("Archivo creado correctamente: " + filename);
+            }
+        }
+        FileOutputStream fop = new FileOutputStream(file);
+        fop.write(content);
+        fop.flush();
+        fop.close();
+        System.out.println("Written: " + filename);
+    }
+
+    private byte[] inputStreamToByteArray(InputStream inputStream) throws IOException {
+        ByteArrayOutputStream buffer = new ByteArrayOutputStream();
+        int nRead;
+        byte[] data = new byte[16384];
+        while ((nRead = inputStream.read(data, 0, data.length)) != -1) {
+            buffer.write(data, 0, nRead);
+        }
+
+        return buffer.toByteArray();
     }
 }
