@@ -102,6 +102,9 @@ Para efectos de demostrar el uso del método POST (a través de la anotación @P
 4. Implementar el método `add`, ahora en la clase de servicio `UserService.java`.
 5. Desplegar y probar agregando un nuevo User y seguidamente consultando la lista para verificar que esté dado de alta.
 6.- ¡Qué pasa si queremos agregar un usuario que ya existe o ver el detalle de uno que no existe?
+```bash
+curl -X POST  -H 'Content-Type:application/json' http://localhost:8080/users -d '{"name":"Raul", "email":"raul@mail.com"}'
+```
 
 ## Manejo Global de Excepciones
 Cuando un error ocurre dentro de nuestros servicios, ya sea un error de negocio o uno de runtime, no queremos que el StackTrace sea devuelto a nuestros cliente (no es apto para cardiacos). En cambio, sería mejor manejar las excepciones y contestar con un código HTTP más adecuado y con un mensaje claro que le indique lo que ha ocurrido, además de alguna sugerencia para remediar lo ocurrido.
